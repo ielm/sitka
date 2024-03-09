@@ -33,7 +33,18 @@ pub struct AvlTree<K: Ord, V> {
 }
 
 impl<K: Ord, V> AvlTree<K, V> {
+    /// Inserts a key-value pair into the AVL tree.
+    ///
+    /// If the key already exists in the tree, the corresponding value is updated.
+    /// If the key does not exist, a new node is created and inserted into the tree.
+    /// The tree is then rebalanced to maintain the AVL property.
+    ///
+    /// # Arguments
+    ///
+    /// * `k` - The key to be inserted.
+    /// * `v` - The value associated with the key.
     fn _insert_kv(&mut self, k: K, v: V) {
+        // If the tree is empty, create a new node and set it as the root
         if self.root.is_none() {
             let node = Box::new(Node::new(k, v));
             let node_ptr = NonNull::new(Box::into_raw(node));
@@ -42,8 +53,10 @@ impl<K: Ord, V> AvlTree<K, V> {
             return;
         }
 
+        // Stack to keep track of the nodes visited during traversal
         let mut node_stack = vec![self.root];
 
+        // Traverse the tree to find the appropriate position for insertion
         'outer: loop {
             let child = node_stack.pop();
 
@@ -52,42 +65,49 @@ impl<K: Ord, V> AvlTree<K, V> {
                 Some(curr) => match Node::compare_key(curr, &k) {
                     None => break 'outer,
                     Some(Ordering::Less) => {
+                        // If the key is greater than the current node's key,
+                        // traverse to the right child
                         let right = Node::get_right(curr);
                         if right.is_some() {
                             node_stack.push(right);
                             continue 'outer;
                         }
 
+                        // If the right child is None, insert a new node as the right child
                         self.len += 1;
                         let right_box = Box::new(Node::new(k, v));
                         let right = NonNull::new(Box::into_raw(right_box));
                         Node::set_right(curr, right);
 
-                        // Rebalance
+                        // Rebalance the tree
                         self._update_heights(self.root);
                         self._try_rebalance(right);
 
                         break 'outer;
                     }
                     Some(Ordering::Greater) => {
+                        // If the key is less than the current node's key,
+                        // traverse to the left child
                         let left = Node::get_left(curr);
                         if left.is_some() {
                             node_stack.push(left);
                             continue 'outer;
                         }
 
+                        // If the left child is None, insert a new node as the left child
                         self.len += 1;
                         let left_box = Box::new(Node::new(k, v));
                         let left = NonNull::new(Box::into_raw(left_box));
                         Node::set_left(curr, left);
 
-                        // Rebalance
+                        // Rebalance the tree
                         self._update_heights(self.root);
                         self._try_rebalance(left);
 
                         break 'outer;
                     }
                     Some(Ordering::Equal) => {
+                        // If the key already exists, update it's value
                         Node::set_value(curr, v);
                         break 'outer;
                     }
@@ -97,50 +117,129 @@ impl<K: Ord, V> AvlTree<K, V> {
     }
 
     /// Binary search to retrieve a node given a key
+    ///
+    /// This function performs a binary search on the AVL tree to find the node
+    /// that contains the specified key. It starts at the root node and traverses
+    /// down the tree by comparing the keys at each node.
+    ///
+    /// # Arguments
+    ///
+    /// * `k` - The key to search for in the tree.
+    ///
+    /// # Returns
+    ///
+    /// * `OptNode<K, V>` - An optional node that contains the specified key.
+    ///                     Returns `Some(node)` if the key is found, or `None`
+    ///                     if the key is not present in the tree.
     fn _get_node(&self, k: &K) -> OptNode<K, V> {
+        // Start the search at the root node
         let mut node = self.root;
 
+        // Traverse the tree until the key is found or the search ends
         loop {
+            // Compare the key of the current node with the search key
             match Node::compare_key(node, k) {
+                // If the current node is None, the key is not found
                 None => break None,
+                // If the search key is greater than the current node's key
+                // move to the right child
                 Some(Ordering::Less) => {
                     node = Node::get_right(node);
                     continue;
                 }
+                // If the search key is less than the current node's key,
+                // move to the left child
                 Some(Ordering::Greater) => {
                     node = Node::get_left(node);
                     continue;
                 }
+
+                // If the search key is equal to the current node's key,
+                // the key has been found. Break the loop and return the node
                 Some(Ordering::Equal) => break node,
             }
         }
     }
 
+    /// Retrieves a mutable reference to the value associated with the given key.
+    ///
+    /// This function searches for the node with the specified key and returns a mutable
+    /// reference to its associated value if found.
+    ///
+    /// # Arguments
+    ///
+    /// * `k` - The key to search for in the tree.
+    ///
+    /// # Returns
+    ///
+    /// * `Option<&'static mut V>` - An optional mutable reference to the value associated with the key.
+    ///                              Returns `Some(&mut value)` if the key is found, or `None` if the key
+    ///                              is not present in the tree.
     fn _get_mut_value(&mut self, k: &K) -> Option<&'static mut V> {
+        // Search for the node with the given key
         let node = self._get_node(k);
+        // Retrieve a mutable reference to the value of the node
         Node::get_mut_value(node)
     }
 
+    /// Finds the maximum child node starting from the given node.
+    ///
+    /// This function traverses the right subtree starting from the given node to find
+    /// the node with the maximum key value.
+    ///
+    /// # Arguments
+    ///
+    /// * `node` - The starting node for the search.
+    ///
+    /// # Returns
+    ///
+    /// * `OptNode<K, V>` - An optional node representing the maximum child node.
+    ///                     Returns `Some(node)` if a maximum child is found, or `None`
+    ///                     if the given node is `None`.
     fn _find_max_child(&self, node: OptNode<K, V>) -> OptNode<K, V> {
+        // Start the search at the given node
         let mut current = node;
+        // Traverse the right subtree until the rightmost node is found
         loop {
+            // Get the right child of the current node
             let right = Node::get_right(current);
             if right.is_some() {
+                // If the right child exists, update current to the right child
                 current = right;
                 continue;
             }
+            // If the right child is None, the current node is the maximum
             break current;
         }
     }
 
+    /// Finds the minimum child node starting from the given node.
+    ///
+    /// This function traverses the left subtree starting from the given node to find
+    /// the node with the minimum key value.
+    ///
+    /// # Arguments
+    ///
+    /// * `node` - The starting node for the search.
+    ///
+    /// # Returns
+    ///
+    /// * `OptNode<K, V>` - An optional node representing the minimum child node.
+    ///                     Returns `Some(node)` if a minimum child is found, or `None`
+    ///                     if the given node is `None`.
     fn _find_min_child(&self, node: OptNode<K, V>) -> OptNode<K, V> {
+        // Start the search at the given node
         let mut current = node;
+        // Traverse the left subtree until the leftmost node is found
         loop {
+            // Get the left child of the current node
             let left = Node::get_left(current);
             if left.is_some() {
+                // If the left child exists, update current to the left child
                 current = left;
                 continue;
             }
+            // If the left child is None, the current node is the minimum
             break current;
         }
     }
@@ -247,25 +346,79 @@ impl<K: Ord, V> AvlTree<K, V> {
         }
     }
 
+    /// Removes and returns the node with the maximum key from the AVL tree.
+    ///
+    /// This function finds the node with the maximum key in the tree, removes it
+    /// from the tree, and returns the removed node.
+    ///
+    /// # Returns
+    ///
+    /// * `OptNode<K, V>` - An optional node representing the removed maximum node.
+    ///                     Returns `Some(node)` if the maximum node is found and removed,
+    ///                     or `None` if the tree is empty.
     fn _pop_max(&mut self) -> OptNode<K, V> {
+        // Find the node with the maximum key in the tree
         let max = self._find_max_child(self.root);
+        // Remove the maximum node from the tree and return it
         self._remove_node(&Node::get_key(max).unwrap())
     }
 
+    /// Removes and returns the node with the maximum key from the AVL tree as a boxed node.
+    ///
+    /// This function finds the node with the maximum key in the tree, removes it
+    /// from the tree, and returns the removed node as a boxed node.
+    ///
+    /// # Returns
+    ///
+    /// * `Option<Box<Node<K, V>>>` - An optional boxed node representing the removed maximum node.
+    ///                               Returns `Some(boxed_node)` if the maximum node is found and removed,
+    ///                               or `None` if the tree is empty.
     fn _pop_max_boxed(&mut self) -> Option<Box<Node<K, V>>> {
+        // Call _pop_max() to remove and return the maximum node
+        // Convert the returned optional node to a boxed node using Node::boxed()
         Node::boxed(self._pop_max())
     }
 
+    /// Removes and returns the node with the minimum key from the AVL tree.
+    ///
+    /// This function finds the node with the minimum key in the tree, removes it
+    /// from the tree, and returns the removed node.
+    ///
+    /// # Returns
+    ///
+    /// * `OptNode<K, V>` - An optional node representing the removed minimum node.
+    ///                     Returns `Some(node)` if the minimum node is found and removed,
+    ///                     or `None` if the tree is empty.
     fn _pop_min(&mut self) -> OptNode<K, V> {
+        // Find the node with the minimum key in the tree
         let min = self._find_min_child(self.root);
+        // Remove the minimum node from the tree and return it
         self._remove_node(&Node::get_key(min).unwrap())
     }
 
+    /// Removes and returns the node with the minimum key from the AVL tree as a boxed node.
+    ///
+    /// This function finds the node with the minimum key in the tree, removes it
+    /// from the tree, and returns the removed node as a boxed node.
+    ///
+    /// # Returns
+    ///
+    /// * `Option<Box<Node<K, V>>>` - An optional boxed node representing the removed minimum node.
+    ///                               Returns `Some(boxed_node)` if the minimum node is found and removed,
+    ///                               or `None` if the tree is empty.
     fn _pop_min_boxed(&mut self) -> Option<Box<Node<K, V>>> {
+        // Call _pop_min() to remove and return the minimum node
+        // Convert the returned optional node to a boxed node using Node::boxed()
         Node::boxed(self._pop_min())
     }
 
-    /// Rotate right on node `y`
+    /// Performs a right rotation on the subtree rooted at node `y`.
+    ///
+    /// The right rotation operation is used to rebalance the AVL tree when the left subtree
+    /// of a node becomes too heavy. It rotates the subtree rooted at `y` to the right, making
+    /// `x` the new root of the subtree.
+    ///
+    /// The rotation is performed as follows:
     ///
     ///       y                x
     ///      / \             /   \
@@ -275,25 +428,42 @@ impl<K: Ord, V> AvlTree<K, V> {
     ///  / \
     /// T1 T2
     ///
+    /// # Arguments
+    ///
+    /// * `y` - The root node of the subtree to be rotated.
     fn _rotate_right(&mut self, y: OptNode<K, V>) {
+        // Get the parent of node y
         let y_parent = Node::get_parent(y);
+        // Get the left child of node y (node x)
         let x = Node::get_left(y);
+        // Get the right child of node x (node T3)
         let t3 = Node::get_right(x);
 
-        Node::set_parent(t3, y);
-        Node::set_parent(y, x);
-        Node::set_parent(x, y_parent);
+        // Update the parent-child relationships
+        Node::set_parent(t3, y); // Set y as the parent of T3
+        Node::set_parent(y, x); // Set x as the parent of y
+        Node::set_parent(x, y_parent); // Set the parent of y as the parent of x
 
+        // If y was the root of the tree, update the root to x
         if y_parent.is_none() {
             self.root = x;
         }
 
+        // Update the heights of the affected nodes
         Node::update_height(y);
         Node::update_height(x);
+        // Update the heights of the nodes above x
         self._update_upper_nodes(x);
     }
 
-    /// Rotate left on node `x`
+    /// Performs a left rotation on the subtree rooted at node `x`.
+    ///
+    /// The left rotation operation is used to rebalance the AVL tree when the right
+    /// subtree of a node becomes too heavy. It rotates the subtree rooted at `x` to
+    /// the left, making`y` the new root of the subtree.
+    ///
+    /// The rotation is performed as follows:
+    ///
     ///      x                y
     ///     / \             /   \
     ///    T1  y           x     z
@@ -302,24 +472,47 @@ impl<K: Ord, V> AvlTree<K, V> {
     ///         / \
     ///        T3 T4
     ///
+    /// # Arguments
+    ///
+    /// * `x` - The root node of the subtree to be rotated.
     fn _rotate_left(&mut self, x: OptNode<K, V>) {
+        // Get the parent of node x
         let x_parent = Node::get_parent(x);
+        // Get the right child of node x (node y)
         let y = Node::get_right(x);
+        // Get the left child of node y (node T2)
         let t2 = Node::get_left(y);
 
-        Node::set_parent(t2, x);
-        Node::set_parent(x, y);
-        Node::set_parent(y, x_parent);
+        // Update the parent-child relationships
+        Node::set_parent(t2, x); // Set x as the parent of T2
+        Node::set_parent(x, y); // Set y as the parent of x
+        Node::set_parent(y, x_parent); // Set the parent of x as the parent of y
 
+        // If x was the root of the tree, update the root to y
         if x_parent.is_none() {
             self.root = y;
         }
 
+        // Update the heights of the affected nodes
         Node::update_height(x);
         Node::update_height(y);
+        // Update the heights of the nodes above y
         self._update_upper_nodes(y);
     }
 
+    /// Calculates the balance factor of a node.
+    ///
+    /// The balance factor is the difference between the heights of the left and right
+    /// subtrees. It indicates whether the tree is balanced or not. A balance factor
+    /// of 0, 1, or -1 is considered balanced.
+    ///
+    /// # Arguments
+    ///
+    /// * `node` - The node for which to calculate the balance factor.
+    ///
+    /// # Returns
+    ///
+    /// The balance factor of the node.
     fn _get_balance_factor(&self, node: OptNode<K, V>) -> isize {
         if node.is_none() {
             0
@@ -328,7 +521,14 @@ impl<K: Ord, V> AvlTree<K, V> {
         }
     }
 
-    /// BFS traversal to check if the tree is balanced
+    /// Checks if the AVL tree is balanced using Breadth-First Search (BFS) traversal.
+    ///
+    /// The tree is considered balanced if the absolute value of the balance factor
+    /// of each node is less than or equal to 1.
+    ///
+    /// # Returns
+    ///
+    /// `true` if the tree is balanced, `false` otherwise.
     fn _is_balanced(&self) -> bool {
         let mut queue = VecDeque::new();
         queue.push_back(self.root);
@@ -337,10 +537,12 @@ impl<K: Ord, V> AvlTree<K, V> {
             match queue.pop_front() {
                 None => break true,
                 Some(node) => {
+                    // Check if the balance factor of the current node exceeds the balance threshold
                     if self._get_balance_factor(node).abs() > BALANCE_THRESHOLD {
                         break false;
                     }
 
+                    // Enqueue the left and right children of the current node if they exist
                     let children = vec![Node::get_left(node), Node::get_right(node)];
                     children.into_iter().for_each(|n| {
                         if n.is_some() {
@@ -353,6 +555,13 @@ impl<K: Ord, V> AvlTree<K, V> {
         }
     }
 
+    /// Attempts to rebalance the AVL tree starting from the given node.
+    ///
+    /// It finds the first unbalanced node from the bottom up and rebalances the tree if an unbalanced node is found.
+    ///
+    /// # Arguments
+    ///
+    /// * `node` - The node from which to start the rebalancing process.
     fn _try_rebalance(&mut self, node: OptNode<K, V>) {
         let unbalanced = self._get_unbalanced_node(node);
         if unbalanced.is_some() {
@@ -360,6 +569,13 @@ impl<K: Ord, V> AvlTree<K, V> {
         }
     }
 
+    /// Rebalances the AVL tree at the given unbalanced node.
+    ///
+    /// It performs the necessary rotations based on the balance factor and the balance factors of the child nodes.
+    ///
+    /// # Arguments
+    ///
+    /// * `node` - The unbalanced node at which to perform the rebalancing.
     fn _rebalance(&mut self, node: OptNode<K, V>) {
         let bf = self._get_balance_factor(node);
 
@@ -389,7 +605,18 @@ impl<K: Ord, V> AvlTree<K, V> {
         }
     }
 
-    /// Find the first unbalanced node from the bottom up
+    /// Finds the first unbalanced node from the bottom up.
+    ///
+    /// This function traverses the tree from the given node upwards until it finds a
+    /// node with a balance factor greater than 1 or reaches the root.
+    ///
+    /// # Arguments
+    ///
+    /// * `node` - The node from which to start the search for an unbalanced node.
+    ///
+    /// # Returns
+    ///
+    /// The first unbalanced node encountered, or `None` if no unbalanced node is found.
     fn _get_unbalanced_node(&mut self, node: OptNode<K, V>) -> OptNode<K, V> {
         let mut current = node;
         loop {
@@ -406,7 +633,14 @@ impl<K: Ord, V> AvlTree<K, V> {
         }
     }
 
-    /// DFS traversal to update the heights of the nodes
+    /// Depth-First Search (DFS) traversal to update the heights of the nodes in the AVL tree.
+    ///
+    /// This function updates the heights of the nodes starting from the given node and
+    /// propagating the changes upwards to the root.
+    ///
+    /// # Arguments
+    ///
+    /// * `node` - The node from which to start updating the heights.
     fn _update_heights(&mut self, node: OptNode<K, V>) {
         let mut node_stack = vec![node];
         let mut updated = HashMap::<OptNode<K, V>, isize>::new();
@@ -423,6 +657,7 @@ impl<K: Ord, V> AvlTree<K, V> {
                     continue 'outer;
                 }
                 Some(curr) => {
+                    // Get the left and right children of the current node
                     let children: Vec<OptNode<K, V>> =
                         vec![Node::get_left(curr), Node::get_right(curr)]
                             .into_iter()
@@ -433,6 +668,7 @@ impl<K: Ord, V> AvlTree<K, V> {
                     let no_children = children.is_empty();
                     let empty_stack = node_stack.is_empty();
 
+                    // Handle different cases based on the presence of node, children, and stack
                     if no_node && no_children && empty_stack {
                         break 'outer;
                     }
@@ -457,6 +693,7 @@ impl<K: Ord, V> AvlTree<K, V> {
                         continue 'outer;
                     }
 
+                    // Find the children that have not been updated yet
                     let not_seen: Vec<OptNode<K, V>> = children
                         .iter()
                         .copied()
@@ -464,6 +701,7 @@ impl<K: Ord, V> AvlTree<K, V> {
                         .collect();
 
                     if not_seen.is_empty() {
+                        // If all children have been updated, calculate the new height of the current node
                         let height =
                             (*children.iter().flat_map(|n| updated.get(n)).max().unwrap()) + 1;
                         Node::set_height(curr, height);
@@ -481,6 +719,36 @@ impl<K: Ord, V> AvlTree<K, V> {
         self._update_upper_nodes(node);
     }
 
+    /// Recursively updates the heights of the nodes in the AVL tree.
+    ///
+    /// This function updates the heights of the nodes starting from the given node and
+    /// propagating the changes upwards to the root.
+    ///
+    /// # Arguments
+    ///
+    /// * `node` - The node from which to start updating the heights.
+    fn _recursive_update_heights(node: OptNode<K, V>) -> isize {
+        match node {
+            None => 0,
+            Some(curr) => {
+                let left_height = AvlTree::_recursive_update_heights(Node::get_left(Some(curr)));
+                let right_height = AvlTree::_recursive_update_heights(Node::get_right(Some(curr)));
+                let new_height = std::cmp::max(left_height, right_height) + 1;
+                Node::set_height(Some(curr), new_height);
+                AvlTree::_recursive_update_upper_nodes(Some(curr));
+                new_height
+            }
+        }
+    }
+
+    /// Updates the heights of the nodes above the given node.
+    ///
+    /// This function traverses upwards from the given node and updates the heights of
+    /// the parent nodes until the root is reached or the height remains unchanged.
+    ///
+    /// # Arguments
+    ///
+    /// * `node` - The node from which to start updating the heights of the upper nodes.
     fn _update_upper_nodes(&mut self, node: OptNode<K, V>) {
         let mut current = node;
         loop {
@@ -489,18 +757,45 @@ impl<K: Ord, V> AvlTree<K, V> {
                 break;
             }
 
+            // Calculate the new height of the parent node
             let new_height = std::cmp::max(
                 Node::get_height(Node::get_left(parent)),
                 Node::get_height(Node::get_right(parent)),
             ) + 1;
 
+            // If the new height is the same as the current height, no further updates are needed
             if new_height == Node::get_height(parent) {
                 break;
             }
 
+            // Update the height of the parent node
             Node::set_height(parent, new_height);
             current = Node::get_parent(parent);
             continue;
+        }
+    }
+
+    /// Recursively updates the heights of the nodes above the given node.
+    ///
+    /// This function traverses upwards from the given node and updates the heights of
+    /// the parent nodes until the root is reached or the height remains unchanged.
+    ///
+    /// # Arguments
+    ///
+    /// * `node` - The node from which to start updating the heights of the upper nodes.
+    fn _recursive_update_upper_nodes(node: OptNode<K, V>) {
+        if let Some(curr) = node {
+            let parent = Node::get_parent(Some(curr));
+            if let Some(p) = parent {
+                let new_height = std::cmp::max(
+                    Node::get_height(Node::get_left(Some(p))),
+                    Node::get_height(Node::get_right(Some(p))),
+                ) + 1;
+                if new_height != Node::get_height(Some(p)) {
+                    Node::set_height(Some(p), new_height);
+                    AvlTree::_recursive_update_upper_nodes(Node::get_parent(Some(p)));
+                }
+            }
         }
     }
 }

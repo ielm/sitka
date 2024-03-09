@@ -75,11 +75,11 @@ pub struct Node<K: Ord, V> {
     parent: OptNode<K, V>,
     left: OptNode<K, V>,
     right: OptNode<K, V>,
-    height: usize,
+    height: isize,
 }
 
 impl<K: Ord, V> Node<K, V> {
-    fn new(key: K, value: V) -> Self {
+    pub fn new(key: K, value: V) -> Self {
         Node {
             key,
             value,
@@ -91,12 +91,36 @@ impl<K: Ord, V> Node<K, V> {
     }
 
     #[inline]
-    fn get_parent(node: OptNode<K, V>) -> OptNode<K, V> {
+    pub fn get_value(node: OptNode<K, V>) -> Option<V> {
+        if node.is_none() {
+            None
+        } else {
+            Some(
+                node.as_ref()
+                    .map(|n| unsafe { std::ptr::read(&(*n.as_ptr()).value) })
+                    .unwrap(),
+            )
+        }
+    }
+
+    #[inline]
+    pub fn get_mut_value(node: OptNode<K, V>) -> Option<&'static mut V> {
+        unsafe { node.map(|n| &mut (*n.as_ptr()).value) }
+    }
+
+    #[inline]
+    pub fn set_value(node: OptNode<K, V>, value: V) {
+        node.as_ref()
+            .map(|n| unsafe { (*n.as_ptr()).value = value });
+    }
+
+    #[inline]
+    pub fn get_parent(node: OptNode<K, V>) -> OptNode<K, V> {
         node.as_ref().and_then(|n| unsafe { (*n.as_ptr()).parent })
     }
 
     #[inline]
-    fn set_parent(child: OptNode<K, V>, parent: OptNode<K, V>) {
+    pub fn set_parent(child: OptNode<K, V>, parent: OptNode<K, V>) {
         if parent.is_none() {
             Node::set_parent(child, None);
         } else {
@@ -116,24 +140,24 @@ impl<K: Ord, V> Node<K, V> {
     }
 
     #[inline]
-    fn get_left(node: OptNode<K, V>) -> OptNode<K, V> {
+    pub fn get_left(node: OptNode<K, V>) -> OptNode<K, V> {
         node.as_ref().and_then(|n| unsafe { (*n.as_ptr()).left })
     }
 
     #[inline]
-    fn set_left(node: OptNode<K, V>, left: OptNode<K, V>) {
+    pub fn set_left(node: OptNode<K, V>, left: OptNode<K, V>) {
         node.as_ref().map(|n| unsafe { (*n.as_ptr()).left = left });
         left.as_ref()
             .map(|l| unsafe { (*l.as_ptr()).parent = node });
     }
 
     #[inline]
-    fn get_right(node: OptNode<K, V>) -> OptNode<K, V> {
+    pub fn get_right(node: OptNode<K, V>) -> OptNode<K, V> {
         node.as_ref().and_then(|n| unsafe { (*n.as_ptr()).right })
     }
 
     #[inline]
-    fn set_right(node: OptNode<K, V>, right: OptNode<K, V>) {
+    pub fn set_right(node: OptNode<K, V>, right: OptNode<K, V>) {
         node.as_ref()
             .map(|n| unsafe { (*n.as_ptr()).right = right });
         right
@@ -142,14 +166,25 @@ impl<K: Ord, V> Node<K, V> {
     }
 
     #[inline]
-    fn order(n1: OptNode<K, V>, n2: OptNode<K, V>) -> Option<Ordering> {
+    pub fn boxed(node: OptNode<K, V>) -> Option<Box<Node<K, V>>> {
+        node.map(|n| unsafe { Box::from_raw(n.as_ptr()) })
+    }
+
+    #[inline]
+    pub fn order(n1: OptNode<K, V>, n2: OptNode<K, V>) -> Option<Ordering> {
         let n1_key = n1.as_ref().map(|n| unsafe { &(n.as_ref()).key });
         let n2_key = n2.as_ref().map(|n| unsafe { &(n.as_ref()).key });
         n1_key.and_then(|n1k| n2_key.map(|n2k| n1k.cmp(n2k)))
     }
 
     #[inline]
-    fn unlink(parent: OptNode<K, V>, child: OptNode<K, V>) {
+    pub fn compare_key(node: OptNode<K, V>, k: &K) -> Option<Ordering> {
+        node.as_ref().map(|n| unsafe { (*n.as_ptr()).key.cmp(k) })
+    }
+
+    /// Unlink child FROM parent
+    #[inline]
+    pub fn unlink(child: OptNode<K, V>, parent: OptNode<K, V>) {
         let ordering = Node::order(parent, child);
 
         if let Some(o) = ordering {
@@ -171,7 +206,7 @@ impl<K: Ord, V> Node<K, V> {
     }
 
     #[inline]
-    fn get_height(node: OptNode<K, V>) -> usize {
+    pub fn get_height(node: OptNode<K, V>) -> isize {
         if node.is_none() {
             0
         } else {
@@ -182,13 +217,13 @@ impl<K: Ord, V> Node<K, V> {
     }
 
     #[inline]
-    fn set_height(node: OptNode<K, V>, height: usize) {
+    pub fn set_height(node: OptNode<K, V>, height: isize) {
         node.as_ref()
             .map_or_else(|| {}, |n| unsafe { (*n.as_ptr()).height = height })
     }
 
     #[inline]
-    fn update_height(node: OptNode<K, V>) {
+    pub fn update_height(node: OptNode<K, V>) {
         let height = std::cmp::max(
             Node::get_height(Node::get_left(node)),
             Node::get_height(Node::get_right(node)),

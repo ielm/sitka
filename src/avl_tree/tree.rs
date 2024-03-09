@@ -1,7 +1,7 @@
 use super::constants::BALANCE_THRESHOLD;
 use super::node::{Node, OptNode};
 use std::cmp::Ordering;
-use std::collections::{HashMap, VecDeque};
+use std::collections::VecDeque;
 use std::marker::PhantomData;
 use std::ptr::NonNull;
 
@@ -35,6 +35,9 @@ pub struct AvlTree<K: Ord, V> {
 impl<K: Ord, V> AvlTree<K, V> {
     /// Inserts a key-value pair into the AVL tree.
     ///
+    /// This function serves as a wrapper to call the recursive `_insert_kv_recursive`
+    /// function with the root node of the tree.
+    ///
     /// If the key already exists in the tree, the corresponding value is updated.
     /// If the key does not exist, a new node is created and inserted into the tree.
     /// The tree is then rebalanced to maintain the AVL property.
@@ -44,75 +47,72 @@ impl<K: Ord, V> AvlTree<K, V> {
     /// * `k` - The key to be inserted.
     /// * `v` - The value associated with the key.
     fn _insert_kv(&mut self, k: K, v: V) {
-        // If the tree is empty, create a new node and set it as the root
-        if self.root.is_none() {
-            let node = Box::new(Node::new(k, v));
-            let node_ptr = NonNull::new(Box::into_raw(node));
-            self.len += 1;
-            self.root = node_ptr;
-            return;
-        }
+        self._insert_kv_recursive(self.root, k, v);
+    }
 
-        // Stack to keep track of the nodes visited during traversal
-        let mut node_stack = vec![self.root];
-
-        // Traverse the tree to find the appropriate position for insertion
-        'outer: loop {
-            let child = node_stack.pop();
-
-            match child {
-                None => break 'outer,
-                Some(curr) => match Node::compare_key(curr, &k) {
-                    None => break 'outer,
-                    Some(Ordering::Less) => {
-                        // If the key is greater than the current node's key,
-                        // traverse to the right child
-                        let right = Node::get_right(curr);
-                        if right.is_some() {
-                            node_stack.push(right);
-                            continue 'outer;
-                        }
-
+    /// Recursively inserts a key-value pair into the AVL tree.
+    ///
+    /// This function recursively traverses the tree to find the appropriate position
+    /// for inserting the new key-value pair. If the key already exists in the tree,
+    /// the corresponding value is updated. If the key does not exist, a new node is
+    /// created and inserted into the tree. The tree is then rebalanced to maintain
+    /// the AVL property.
+    ///
+    /// # Arguments
+    ///
+    /// * `node` - The current node being visited during the recursive traversal.
+    /// * `k` - The key to be inserted.
+    /// * `v` - The value associated with the key.
+    fn _insert_kv_recursive(&mut self, node: OptNode<K, V>, k: K, v: V) {
+        match node {
+            None => {
+                // If the current node is None, create a new node and insert it
+                let new_node = Box::new(Node::new(k, v));
+                let new_node_ptr = NonNull::new(Box::into_raw(new_node));
+                self.len += 1;
+                self.root = new_node_ptr;
+            }
+            Some(curr) => match Node::compare_key(Some(curr), &k) {
+                None => {}
+                Some(Ordering::Less) => {
+                    // If the key is greater than the current node's key,
+                    // recursively insert into the right subtree
+                    let right = Node::get_right(Some(curr));
+                    if right.is_none() {
                         // If the right child is None, insert a new node as the right child
                         self.len += 1;
                         let right_box = Box::new(Node::new(k, v));
                         let right = NonNull::new(Box::into_raw(right_box));
-                        Node::set_right(curr, right);
-
-                        // Rebalance the tree
-                        self._update_heights(self.root);
+                        Node::set_right(Some(curr), right);
+                        Node::set_parent(right, Some(curr));
+                        AvlTree::_update_heights(Some(curr));
                         self._try_rebalance(right);
-
-                        break 'outer;
+                    } else {
+                        self._insert_kv_recursive(right, k, v);
                     }
-                    Some(Ordering::Greater) => {
-                        // If the key is less than the current node's key,
-                        // traverse to the left child
-                        let left = Node::get_left(curr);
-                        if left.is_some() {
-                            node_stack.push(left);
-                            continue 'outer;
-                        }
-
+                }
+                Some(Ordering::Greater) => {
+                    // If the key is less than the current node's key,
+                    // recursively insert into the left subtree
+                    let left = Node::get_left(Some(curr));
+                    if left.is_none() {
                         // If the left child is None, insert a new node as the left child
                         self.len += 1;
                         let left_box = Box::new(Node::new(k, v));
                         let left = NonNull::new(Box::into_raw(left_box));
-                        Node::set_left(curr, left);
-
-                        // Rebalance the tree
-                        self._update_heights(self.root);
+                        Node::set_left(Some(curr), left);
+                        Node::set_parent(left, Some(curr));
+                        AvlTree::_update_heights(Some(curr));
                         self._try_rebalance(left);
-
-                        break 'outer;
+                    } else {
+                        self._insert_kv_recursive(left, k, v);
                     }
-                    Some(Ordering::Equal) => {
-                        // If the key already exists, update it's value
-                        Node::set_value(curr, v);
-                        break 'outer;
-                    }
-                },
-            }
+                }
+                Some(Ordering::Equal) => {
+                    // If the key already exists, update its value
+                    Node::set_value(Some(curr), v);
+                }
+            },
         }
     }
 
@@ -310,7 +310,7 @@ impl<K: Ord, V> AvlTree<K, V> {
                             // Unlink the current node from its parent
                             Node::unlink(node, parent);
                             // Update the heights of the nodes starting from the parent
-                            self._update_heights(parent);
+                            AvlTree::_update_heights(parent);
                             // Try to rebalance the tree starting from the parent
                             self._try_rebalance(parent);
                         } else {
@@ -335,7 +335,7 @@ impl<K: Ord, V> AvlTree<K, V> {
                         Node::set_parent(replacement, None);
                     }
                     // Update the heights of the nodes starting from the replacement node
-                    self._update_heights(replacement);
+                    AvlTree::_update_heights(replacement);
                     // Try to rebalance the tree starting from the replacement node
                     self._try_rebalance(replacement);
                 }
@@ -453,7 +453,7 @@ impl<K: Ord, V> AvlTree<K, V> {
         Node::update_height(y);
         Node::update_height(x);
         // Update the heights of the nodes above x
-        self._update_upper_nodes(x);
+        AvlTree::_update_upper_nodes(x);
     }
 
     /// Performs a left rotation on the subtree rooted at node `x`.
@@ -464,11 +464,11 @@ impl<K: Ord, V> AvlTree<K, V> {
     ///
     /// The rotation is performed as follows:
     ///
-    ///      x                y
-    ///     / \             /   \
-    ///    T1  y           x     z
-    ///       / \    -->  / \   / \
-    ///      T2  z       T1 T2 T3 T4
+    ///      x                  y
+    ///     / \               /   \
+    ///    T1  y             x     z
+    ///       / \    -->    / \   / \
+    ///      T2  z         T1 T2 T3 T4
     ///         / \
     ///        T3 T4
     ///
@@ -497,7 +497,7 @@ impl<K: Ord, V> AvlTree<K, V> {
         Node::update_height(x);
         Node::update_height(y);
         // Update the heights of the nodes above y
-        self._update_upper_nodes(y);
+        AvlTree::_update_upper_nodes(y);
     }
 
     /// Calculates the balance factor of a node.
@@ -633,92 +633,6 @@ impl<K: Ord, V> AvlTree<K, V> {
         }
     }
 
-    /// Depth-First Search (DFS) traversal to update the heights of the nodes in the AVL tree.
-    ///
-    /// This function updates the heights of the nodes starting from the given node and
-    /// propagating the changes upwards to the root.
-    ///
-    /// # Arguments
-    ///
-    /// * `node` - The node from which to start updating the heights.
-    fn _update_heights(&mut self, node: OptNode<K, V>) {
-        let mut node_stack = vec![node];
-        let mut updated = HashMap::<OptNode<K, V>, isize>::new();
-
-        // Update heights of lower nodes
-        'outer: loop {
-            let child = node_stack.pop();
-
-            match child {
-                None => {
-                    if node_stack.is_empty() {
-                        break 'outer;
-                    }
-                    continue 'outer;
-                }
-                Some(curr) => {
-                    // Get the left and right children of the current node
-                    let children: Vec<OptNode<K, V>> =
-                        vec![Node::get_left(curr), Node::get_right(curr)]
-                            .into_iter()
-                            .filter(|n| n.is_some())
-                            .collect();
-
-                    let no_node = curr.is_none();
-                    let no_children = children.is_empty();
-                    let empty_stack = node_stack.is_empty();
-
-                    // Handle different cases based on the presence of node, children, and stack
-                    if no_node && no_children && empty_stack {
-                        break 'outer;
-                    }
-                    if no_node && !no_children && empty_stack {
-                        break 'outer;
-                    }
-                    if no_node && no_children && !empty_stack {
-                        continue 'outer;
-                    }
-                    // NOTE - Is it possible to have a None node with children?
-                    if no_node && !no_children && !empty_stack {
-                        children.into_iter().for_each(|n| node_stack.push(n));
-                        continue 'outer;
-                    }
-                    if !no_node && no_children && empty_stack {
-                        Node::set_height(curr, 1);
-                        break 'outer;
-                    }
-                    if !no_node && no_children && !empty_stack {
-                        Node::set_height(curr, 1);
-                        updated.insert(curr, 1);
-                        continue 'outer;
-                    }
-
-                    // Find the children that have not been updated yet
-                    let not_seen: Vec<OptNode<K, V>> = children
-                        .iter()
-                        .copied()
-                        .filter(|n| !updated.contains_key(n))
-                        .collect();
-
-                    if not_seen.is_empty() {
-                        // If all children have been updated, calculate the new height of the current node
-                        let height =
-                            (*children.iter().flat_map(|n| updated.get(n)).max().unwrap()) + 1;
-                        Node::set_height(curr, height);
-                        updated.insert(curr, height);
-                        continue 'outer;
-                    }
-                    node_stack.push(curr);
-                    not_seen.into_iter().for_each(|n| node_stack.push(n));
-                    continue 'outer;
-                }
-            }
-        }
-
-        // Update heights of upper nodes
-        self._update_upper_nodes(node);
-    }
-
     /// Recursively updates the heights of the nodes in the AVL tree.
     ///
     /// This function updates the heights of the nodes starting from the given node and
@@ -727,51 +641,17 @@ impl<K: Ord, V> AvlTree<K, V> {
     /// # Arguments
     ///
     /// * `node` - The node from which to start updating the heights.
-    fn _recursive_update_heights(node: OptNode<K, V>) -> isize {
+    fn _update_heights(node: OptNode<K, V>) -> isize {
         match node {
             None => 0,
             Some(curr) => {
-                let left_height = AvlTree::_recursive_update_heights(Node::get_left(Some(curr)));
-                let right_height = AvlTree::_recursive_update_heights(Node::get_right(Some(curr)));
+                let left_height = AvlTree::_update_heights(Node::get_left(Some(curr)));
+                let right_height = AvlTree::_update_heights(Node::get_right(Some(curr)));
                 let new_height = std::cmp::max(left_height, right_height) + 1;
                 Node::set_height(Some(curr), new_height);
-                AvlTree::_recursive_update_upper_nodes(Some(curr));
+                AvlTree::_update_upper_nodes(Some(curr));
                 new_height
             }
-        }
-    }
-
-    /// Updates the heights of the nodes above the given node.
-    ///
-    /// This function traverses upwards from the given node and updates the heights of
-    /// the parent nodes until the root is reached or the height remains unchanged.
-    ///
-    /// # Arguments
-    ///
-    /// * `node` - The node from which to start updating the heights of the upper nodes.
-    fn _update_upper_nodes(&mut self, node: OptNode<K, V>) {
-        let mut current = node;
-        loop {
-            let parent = Node::get_parent(current);
-            if parent.is_none() {
-                break;
-            }
-
-            // Calculate the new height of the parent node
-            let new_height = std::cmp::max(
-                Node::get_height(Node::get_left(parent)),
-                Node::get_height(Node::get_right(parent)),
-            ) + 1;
-
-            // If the new height is the same as the current height, no further updates are needed
-            if new_height == Node::get_height(parent) {
-                break;
-            }
-
-            // Update the height of the parent node
-            Node::set_height(parent, new_height);
-            current = Node::get_parent(parent);
-            continue;
         }
     }
 
@@ -783,7 +663,7 @@ impl<K: Ord, V> AvlTree<K, V> {
     /// # Arguments
     ///
     /// * `node` - The node from which to start updating the heights of the upper nodes.
-    fn _recursive_update_upper_nodes(node: OptNode<K, V>) {
+    fn _update_upper_nodes(node: OptNode<K, V>) {
         if let Some(curr) = node {
             let parent = Node::get_parent(Some(curr));
             if let Some(p) = parent {
@@ -793,7 +673,7 @@ impl<K: Ord, V> AvlTree<K, V> {
                 ) + 1;
                 if new_height != Node::get_height(Some(p)) {
                     Node::set_height(Some(p), new_height);
-                    AvlTree::_recursive_update_upper_nodes(Node::get_parent(Some(p)));
+                    AvlTree::_update_upper_nodes(Node::get_parent(Some(p)));
                 }
             }
         }

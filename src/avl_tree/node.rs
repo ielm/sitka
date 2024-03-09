@@ -70,8 +70,8 @@ pub type OptNode<K, V> = Option<NonNull<Node<K, V>>>;
 ///   It is of type `i32`.
 #[derive(Debug)]
 pub struct Node<K: Ord, V> {
-    key: K,
-    value: V,
+    pub key: K,
+    pub value: V,
     parent: OptNode<K, V>,
     left: OptNode<K, V>,
     right: OptNode<K, V>,
@@ -87,6 +87,19 @@ impl<K: Ord, V> Node<K, V> {
             left: None,
             right: None,
             height: 1,
+        }
+    }
+
+    #[inline]
+    // pub fn into_element(n: Box<Node<K, V>>) -> (K, V) {
+    pub fn into_element(node: OptNode<K, V>) -> (K, V) {
+        let n = node.unwrap();
+
+        unsafe {
+            (
+                std::ptr::read(&(*n.as_ptr()).key),
+                std::ptr::read(&(*n.as_ptr()).value),
+            )
         }
     }
 

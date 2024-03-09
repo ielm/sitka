@@ -115,6 +115,19 @@ impl<K: Ord, V> Node<K, V> {
     }
 
     #[inline]
+    pub fn get_key(node: OptNode<K, V>) -> Option<K> {
+        if node.is_none() {
+            None
+        } else {
+            Some(
+                node.as_ref()
+                    .map(|n| unsafe { std::ptr::read(&(*n.as_ptr()).key) })
+                    .unwrap(),
+            )
+        }
+    }
+
+    #[inline]
     pub fn get_parent(node: OptNode<K, V>) -> OptNode<K, V> {
         node.as_ref().and_then(|n| unsafe { (*n.as_ptr()).parent })
     }

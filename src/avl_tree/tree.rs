@@ -247,6 +247,24 @@ impl<K: Ord, V> AvlTree<K, V> {
         }
     }
 
+    fn _pop_max(&mut self) -> OptNode<K, V> {
+        let max = self._find_max_child(self.root);
+        self._remove_node(&Node::get_key(max).unwrap())
+    }
+
+    fn _pop_max_boxed(&mut self) -> Option<Box<Node<K, V>>> {
+        Node::boxed(self._pop_max())
+    }
+
+    fn _pop_min(&mut self) -> OptNode<K, V> {
+        let min = self._find_min_child(self.root);
+        self._remove_node(&Node::get_key(min).unwrap())
+    }
+
+    fn _pop_min_boxed(&mut self) -> Option<Box<Node<K, V>>> {
+        Node::boxed(self._pop_min())
+    }
+
     /// Rotate right on node `y`
     ///
     ///       y                x

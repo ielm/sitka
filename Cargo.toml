@@ -1,0 +1,9 @@
+[package]
+name = "sitka"
+version = "0.0.1"
+edition = "2021"
+authors = ["@ielm"]
+description = "A set of tree data structures for Rust"
+
+[dependencies]
+

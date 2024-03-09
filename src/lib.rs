@@ -1,1 +1,2 @@
-// Placeholder for ielm's tree data structures
+pub mod avl_tree;
+

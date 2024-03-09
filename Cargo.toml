@@ -8,5 +8,8 @@ homepage = "https://github.com/ielm/sitka"
 repository = "https://github.com/ielm/sitka"
 description = "A set of tree data structures for Rust"
 
+[toolchain]
+channel = "nightly"
+
 [dependencies]
 

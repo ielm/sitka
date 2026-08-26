@@ -148,7 +148,9 @@ impl<K: Ord, V> Node<K, V> {
     #[inline]
     pub fn set_parent(child: OptNode<K, V>, parent: OptNode<K, V>) {
         if parent.is_none() {
-            Node::set_parent(child, None);
+            child
+                .as_ref()
+                .map(|c| unsafe { (*c.as_ptr()).parent = None });
         } else {
             let ordering = Node::order(parent, child);
 

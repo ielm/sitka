@@ -376,41 +376,56 @@ impl<K: Ord, V> AvlTree<K, V> {
                 let left = Node::get_left(node);
                 let right = Node::get_right(node);
 
-                // Determine the replacement node and whether to update its parent
-                let (replacement, update_parent) = match (left.is_some(), right.is_some()) {
-                    // If both left and right children exist
-                    (true, true) => {
-                        // Find the maximum node in the left subtree
-                        let l_max = self._find_max_child(left);
-                        // Unlink the maximum node from its parent
-                        Node::unlink(l_max, Node::get_parent(l_max));
-                        // Set the right child of the maximum node to the right child of the current node
-                        Node::set_right(l_max, right);
-                        // If the maximum node is not the direct left child, set its left child to the left child of the current node
-                        if !l_max.eq(&left) {
-                            Node::set_left(l_max, left);
+                // Determine the replacement node, whether to update its parent,
+                // and the deepest node from which rebalancing should start
+                let (replacement, update_parent, rebalance_from) =
+                    match (left.is_some(), right.is_some()) {
+                        // If both left and right children exist
+                        (true, true) => {
+                            // Find the maximum node in the left subtree
+                            let l_max = self._find_max_child(left);
+                            if !l_max.eq(&left) {
+                                // Splice the maximum node out of the left subtree,
+                                // reattaching its left child (if any) to its old parent
+                                let l_max_parent = Node::get_parent(l_max);
+                                Node::set_right(l_max_parent, Node::get_left(l_max));
+                                // Set the left child of the maximum node to the left child of the current node
+                                Node::set_left(l_max, left);
+                                // Set the right child of the maximum node to the right child of the current node
+                                Node::set_right(l_max, right);
+                                // Return the maximum node as the replacement, indicate to update
+                                // its parent, and rebalance from the splice point
+                                (l_max, true, l_max_parent)
+                            } else {
+                                // The left child itself is the maximum of the left subtree
+                                Node::unlink(l_max, Node::get_parent(l_max));
+                                Node::set_right(l_max, right);
+                                (l_max, true, l_max)
+                            }
                         }
-                        // Return the maximum node as the replacement and indicate to update its parent
-                        (l_max, true)
-                    }
 
-                    // If only the left child exists
-                    (true, false) => {
-                        // Find the maximum node in the left subtree
-                        let l_max = self._find_max_child(left);
-                        // Unlink the maximum node from its parent
-                        Node::unlink(l_max, Node::get_parent(l_max));
-                        // If the maximum node is not the direct left child, set its left child to the left child of the current node
-                        if !l_max.eq(&left) {
-                            Node::set_left(l_max, left);
+                        // If only the left child exists
+                        (true, false) => {
+                            // Find the maximum node in the left subtree
+                            let l_max = self._find_max_child(left);
+                            if !l_max.eq(&left) {
+                                // Splice the maximum node out of the left subtree,
+                                // reattaching its left child (if any) to its old parent
+                                let l_max_parent = Node::get_parent(l_max);
+                                Node::set_right(l_max_parent, Node::get_left(l_max));
+                                // Set the left child of the maximum node to the left child of the current node
+                                Node::set_left(l_max, left);
+                                (l_max, true, l_max_parent)
+                            } else {
+                                // The left child itself is the maximum of the left subtree
+                                Node::unlink(l_max, Node::get_parent(l_max));
+                                (l_max, true, l_max)
+                            }
                         }
-                        // Return the maximum node as the replacement and indicate to update its parent
-                        (l_max, true)
-                    }
 
-                    // If the left child is absent and the right child exists,
-                    // use the right child as the replacement node and indicate to update its parent
-                    (false, true) => (right, true),
+                        // If the left child is absent and the right child exists,
+                        // use the right child as the replacement node and indicate to update its parent
+                        (false, true) => (right, true, right),
 
                     // If both left and right children are absent
                     (false, false) => {
@@ -444,8 +459,8 @@ impl<K: Ord, V> AvlTree<K, V> {
                     }
                     // Update the heights of the nodes starting from the replacement node
                     AvlTree::_update_heights(replacement);
-                    // Try to rebalance the tree starting from the replacement node
-                    self._try_rebalance(replacement);
+                    // Try to rebalance the tree starting from the deepest changed node
+                    self._try_rebalance(rebalance_from);
                 }
 
                 // Return the removed node
@@ -467,8 +482,12 @@ impl<K: Ord, V> AvlTree<K, V> {
     fn _pop_max(&mut self) -> OptNode<K, V> {
         // Find the node with the maximum key in the tree
         let max = self._find_max_child(self.root);
-        // Remove the maximum node from the tree and return it
-        self._remove_node(&Node::get_key(max).unwrap())
+        // Remove the maximum node from the tree and return it,
+        // or return None if the tree is empty
+        match Node::get_key(max) {
+            None => None,
+            Some(k) => self._remove_node(&k),
+        }
     }
 
     /// Removes and returns the node with the maximum key from the AVL tree as a boxed node.
@@ -500,8 +519,12 @@ impl<K: Ord, V> AvlTree<K, V> {
     fn _pop_min(&mut self) -> OptNode<K, V> {
         // Find the node with the minimum key in the tree
         let min = self._find_min_child(self.root);
-        // Remove the minimum node from the tree and return it
-        self._remove_node(&Node::get_key(min).unwrap())
+        // Remove the minimum node from the tree and return it,
+        // or return None if the tree is empty
+        match Node::get_key(min) {
+            None => None,
+            Some(k) => self._remove_node(&k),
+        }
     }
 
     /// Removes and returns the node with the minimum key from the AVL tree as a boxed node.
@@ -528,6 +551,7 @@ impl<K: Ord, V> AvlTree<K, V> {
     ///
     /// The rotation is performed as follows:
     ///
+    /// ```text
     ///       y                x
     ///      / \             /   \
     ///     x  T4           z     y
@@ -535,6 +559,7 @@ impl<K: Ord, V> AvlTree<K, V> {
     ///   z  T3           T1 T2 T3 T4
     ///  / \
     /// T1 T2
+    /// ```
     ///
     /// # Arguments
     ///
@@ -548,7 +573,7 @@ impl<K: Ord, V> AvlTree<K, V> {
         let t3 = Node::get_right(x);
 
         // Update the parent-child relationships
-        Node::set_parent(t3, y); // Set y as the parent of T3
+        Node::set_left(y, t3); // Make T3 the left child of y (clears y's link to x even if T3 is None)
         Node::set_parent(y, x); // Set x as the parent of y
         Node::set_parent(x, y_parent); // Set the parent of y as the parent of x
 
@@ -572,6 +597,7 @@ impl<K: Ord, V> AvlTree<K, V> {
     ///
     /// The rotation is performed as follows:
     ///
+    /// ```text
     ///      x                  y
     ///     / \               /   \
     ///    T1  y             x     z
@@ -579,6 +605,7 @@ impl<K: Ord, V> AvlTree<K, V> {
     ///      T2  z         T1 T2 T3 T4
     ///         / \
     ///        T3 T4
+    /// ```
     ///
     /// # Arguments
     ///
@@ -592,7 +619,7 @@ impl<K: Ord, V> AvlTree<K, V> {
         let t2 = Node::get_left(y);
 
         // Update the parent-child relationships
-        Node::set_parent(t2, x); // Set x as the parent of T2
+        Node::set_right(x, t2); // Make T2 the right child of x (clears x's link to y even if T2 is None)
         Node::set_parent(x, y); // Set y as the parent of x
         Node::set_parent(y, x_parent); // Set the parent of x as the parent of y
 
@@ -671,9 +698,12 @@ impl<K: Ord, V> AvlTree<K, V> {
     ///
     /// * `node` - The node from which to start the rebalancing process.
     fn _try_rebalance(&mut self, node: OptNode<K, V>) {
-        let unbalanced = self._get_unbalanced_node(node);
-        if unbalanced.is_some() {
+        // A removal may unbalance several ancestors, so keep rebalancing
+        // upwards until no unbalanced node remains on the path to the root
+        let mut unbalanced = self._get_unbalanced_node(node);
+        while unbalanced.is_some() {
             self._rebalance(unbalanced);
+            unbalanced = self._get_unbalanced_node(unbalanced);
         }
     }
 
@@ -781,7 +811,9 @@ impl<K: Ord, V> AvlTree<K, V> {
                 ) + 1;
                 if new_height != Node::get_height(Some(p)) {
                     Node::set_height(Some(p), new_height);
-                    AvlTree::_update_upper_nodes(Node::get_parent(Some(p)));
+                    // Continue propagating upwards from `p` (this function
+                    // updates the parent of the node it is given)
+                    AvlTree::_update_upper_nodes(parent);
                 }
             }
         }
@@ -868,6 +900,7 @@ impl<'a, K: Ord, V> Iter<'a, K, V> {
                 self.next_nodes.push(left);
             } else if left.is_some() {
                 self.next_nodes.push(node);
+                self.next_nodes.push(left);
             } else {
                 if right.is_some() {
                     self.next_nodes.push(right);
@@ -912,7 +945,7 @@ impl<'a, K: Ord, V> Iter<'a, K, V> {
                     self.next_back_nodes.push(right);
                 } else {
                     if let Some(n) = node {
-                        self.seen.insert(n);
+                        self.seen_back.insert(n);
                     }
                     return node;
                 }

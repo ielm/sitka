@@ -2,14 +2,13 @@
 name = "sitka"
 version = "0.0.1"
 edition = "2021"
-authors = ["@ielm"]
+authors = ["Ivan Leon <i.leonmaldonado@gmail.com>"]
 license = "MIT"
 homepage = "https://github.com/ielm/sitka"
 repository = "https://github.com/ielm/sitka"
-description = "A set of tree data structures for Rust"
-
-[toolchain]
-channel = "nightly"
+description = "Nonlinear data structures for Rust"
+readme = "README.md"
+keywords = ["data-structures", "tree", "avl", "nonlinear"]
+categories = ["data-structures"]
 
 [dependencies]
-
